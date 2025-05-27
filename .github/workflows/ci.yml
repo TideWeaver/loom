@@ -36,11 +36,7 @@ jobs:
 
   test:
     name: Run tests
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, macos-14, windows-2022]
-        rust-version: ["1.85.0", "stable"]
-    runs-on: ${{ matrix.os }}
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
@@ -48,13 +44,11 @@ jobs:
         run: rm rust-toolchain.toml
       - name: Install toolchain
         uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust-version }}
       - name: Run unit tests
         run: cargo test
         shell: bash
       - name: Build
-        run: cargo build --release --target=${{ matrix.os }} --target-dir=target/loom-cli
+        run: cargo build --release --target-dir=target/loom-cli
       - name: Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag' && github.event_name == 'push'
