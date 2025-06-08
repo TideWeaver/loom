@@ -1,0 +1,17 @@
+[package]
+edition = "2024"
+name = "loom"
+version = "0.0.1"
+
+[dependencies]
+clap = { version = "4.5.38", features = ["derive", "cargo"] }
+config = "0.15.11"
+serde = { workspace = true }
+serde_json = { workspace = true }
+snafu = { workspace = true }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres"] }
+tokio = { version = "1", features = ["full"] }
+
+[[test]]
+harness = false
+name = "it"

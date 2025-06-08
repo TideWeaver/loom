@@ -1,6 +1,6 @@
 [workspace]
 authors = ["Nlimpid <jshuangzl@gmail.com>"]
-members = ["loom-cli"]
+members = ["loom", "loom-cli"]
 resolver = "2"
 
 [workspace.dependencies]

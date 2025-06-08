@@ -1,11 +1,12 @@
 [package]
+edition = "2024"
 name = "loom-cli"
 version = "0.0.1"
-edition = "2024"
 
 [dependencies]
-clap = {version = "4.5.38",  features = ["derive", "cargo"]}
-snafu = {workspace = true}
+clap = { version = "4.5.38", features = ["derive", "cargo"] }
+loom = { path = "../loom" }
+snafu = { workspace = true }
 
 [[bin]]
 name = "loom"

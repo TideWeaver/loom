@@ -1,5 +1,4 @@
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+
 
 use clap::{Parser, Subcommand};
 
@@ -7,7 +6,7 @@ use clap::{Parser, Subcommand};
 #[clap(
     name = "loom",
     author,
-    about = "A command line interface for Loom",
+    about = "A tool to interact with database",
     version = "0.0.1"
 )]
 struct Args {
@@ -17,13 +16,15 @@ struct Args {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    List(ListArgs),
+    Execution(ExecutionArgs),
 }
 
-#[derive(Debug, clap::Args)]
-#[clap(author, about = "list resources", version = "0.0.1")]
-struct ListArgs {}
 
+#[derive(Debug, clap::Args)]
+#[clap(author, about = "execute a query", version = "0.0.1")]
+struct ExecutionArgs {}
+
+use loom::Loom;
 use snafu::prelude::*;
 
 #[derive(Debug, Snafu)]
@@ -35,8 +36,10 @@ enum Error {
 fn main() -> Result<(), Error> {
     let args = Args::parse();
 
+    let m = Loom::new_from_config()
+
     match args.command {
-        Commands::List(args) => list(args),
+        Commands::Execution(args) => list(args),
     }
 }
 
