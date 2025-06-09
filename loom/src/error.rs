@@ -12,7 +12,6 @@ pub enum Error {
     #[snafu(display("PG error: {source}"))]
     Pg { source: sqlx::Error },
 
-
     #[snafu(display("Config error: {source}"))]
     Config { source: ConfigError },
 

@@ -7,6 +7,7 @@ version = "0.0.1"
 clap = { version = "4.5.38", features = ["derive", "cargo"] }
 loom = { path = "../loom" }
 snafu = { workspace = true }
+tokio = { workspace = true }
 
 [[bin]]
 name = "loom"

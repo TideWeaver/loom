@@ -12,6 +12,11 @@ snafu = { workspace = true }
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres"] }
 tokio = { version = "1", features = ["full"] }
 
+[dev-dependencies]
+dotenvy = "0.15"
+serde_yaml = "0.9"
+tempfile = "3.8"
+
 [[test]]
 harness = false
 name = "it"
