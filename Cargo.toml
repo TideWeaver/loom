@@ -1,5 +1,4 @@
 [workspace]
-authors = ["Nlimpid <jshuangzl@gmail.com>"]
 members = ["loom", "loom-cli"]
 resolver = "2"
 

@@ -304,30 +304,56 @@ async fn test_invalid_config_path() -> TestResult {
 
 // 测试错误处理 - 无效的数据库 URL
 async fn test_invalid_database_url() -> TestResult {
-    let temp_dir = match tempfile::tempdir() {
-        Ok(dir) => dir,
-        Err(e) => {
-            return TestResult::failed(
-                "test_invalid_database_url",
-                format!("Failed to create temp dir: {}", e),
-            );
-        }
-    };
-
-    let config_content = "database_url: \"invalid://url\"";
-    if let Err(e) = std::fs::write(temp_dir.path().join("config.yml"), config_content) {
-        return TestResult::failed(
-            "test_invalid_database_url",
-            format!("Failed to write config file: {}", e),
-        );
-    }
-
-    match Loom::new_from_config(temp_dir.path()).await {
+    // 直接使用无效的 URL 测试，不依赖配置文件
+    match Loom::new_from_url("invalid://url").await {
         Ok(_) => TestResult::failed(
             "test_invalid_database_url",
             "Expected error for invalid database URL but got success".to_string(),
         ),
         Err(_) => TestResult::passed("test_invalid_database_url"),
+    }
+}
+
+// 测试从环境变量创建 Loom 实例
+async fn test_loom_new_from_env() -> TestResult {
+    let database_url = match get_database_url() {
+        Some(url) => url,
+        None => {
+            println!("Skipping test_loom_new_from_env: DATABASE_URL environment variable not set");
+            return TestResult::passed("test_loom_new_from_env (skipped)");
+        }
+    };
+
+    // 设置环境变量
+    unsafe {
+        std::env::set_var("LOOM_DATABASE_URL", &database_url);
+    }
+
+    match Loom::new_from_env().await {
+        Ok(_) => TestResult::passed("test_loom_new_from_env"),
+        Err(e) => TestResult::failed(
+            "test_loom_new_from_env",
+            format!("Failed to create Loom from env: {:?}", e),
+        ),
+    }
+}
+
+// 测试直接从 URL 创建 Loom 实例
+async fn test_loom_new_from_url() -> TestResult {
+    let database_url = match get_database_url() {
+        Some(url) => url,
+        None => {
+            println!("Skipping test_loom_new_from_url: DATABASE_URL environment variable not set");
+            return TestResult::passed("test_loom_new_from_url (skipped)");
+        }
+    };
+
+    match Loom::new_from_url(&database_url).await {
+        Ok(_) => TestResult::passed("test_loom_new_from_url"),
+        Err(e) => TestResult::failed(
+            "test_loom_new_from_url",
+            format!("Failed to create Loom from URL: {:?}", e),
+        ),
     }
 }
 
@@ -441,8 +467,13 @@ async fn main() {
     results.push(test_invalid_config_path().await);
 
     println!("Running test: Invalid Database URL");
-    // TODO: 需要修复这个测试，因为数据库 URL 是必须的
-    // results.push(test_invalid_database_url().await);
+    results.push(test_invalid_database_url().await);
+
+    println!("Running test: Loom New From Env");
+    results.push(test_loom_new_from_env().await);
+
+    println!("Running test: Loom New From URL");
+    results.push(test_loom_new_from_url().await);
 
     println!("Running test: Batch Operations");
     results.push(test_batch_operations().await);
