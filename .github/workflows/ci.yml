@@ -21,7 +21,7 @@ concurrency:
 jobs:
   check:
     name: Check
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: ubicloud-standard-2
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
@@ -36,7 +36,7 @@ jobs:
 
   test:
     name: Run tests
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: ubicloud-standard-2
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
