@@ -1,6 +1,8 @@
-use loom::{Config, Loom};
 use std::env;
 use std::sync::Once;
+
+use loom::Config;
+use loom::Loom;
 
 static INIT: Once = Once::new();
 

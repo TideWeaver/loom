@@ -1,7 +1,9 @@
-use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
+use clap::Parser;
+use clap::Subcommand;
 use loom::Loom;
 use snafu::prelude::*;
-use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[clap(
