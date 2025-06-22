@@ -4,8 +4,11 @@ name = "loom"
 version = "0.0.1"
 
 [dependencies]
+async-trait = "0.1"
+chrono = "0.4.31"
 clap = { version = "4.5.38", features = ["derive", "cargo"] }
 config = "0.15.11"
+datafusion = "33"
 serde = { workspace = true }
 serde_json = { workspace = true }
 snafu = { workspace = true }
@@ -20,3 +23,7 @@ tempfile = "3.8"
 [[test]]
 harness = false
 name = "it"
+
+[[example]]
+name = "datafusion_query"
+path = "../examples/datafusion_query.rs"

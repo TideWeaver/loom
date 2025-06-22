@@ -1,0 +1,3 @@
+# Loom configuration file
+# For testing DataFusion without a real database
+database_url: "postgresql://dummy:dummy@localhost/dummy"

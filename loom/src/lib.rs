@@ -2,7 +2,9 @@
 //!
 //! This crate provides the core functionality for the loom project.
 
+pub mod datafusion;
 pub mod error;
+
 use error::Result;
 use snafu::prelude::*;
 

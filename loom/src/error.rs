@@ -17,4 +17,9 @@ pub enum Error {
 
     #[snafu(display("Generic error: {message}"))]
     Generic { message: String },
+
+    #[snafu(display("DataFusion error: {source}"))]
+    DataFusion {
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
 }
