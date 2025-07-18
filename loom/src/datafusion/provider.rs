@@ -7,12 +7,13 @@ use async_trait::async_trait;
 use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::common::Result as DataFusionResult;
 use datafusion::datasource::TableProvider;
-use datafusion::execution::context::SessionState;
+use datafusion::catalog::Session;
 use datafusion::logical_expr::TableType;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::prelude::*;
 
 /// A PostgreSQL table provider for DataFusion
+#[derive(Debug)]
 pub struct PostgresTableProvider {
     schema: SchemaRef,
     #[allow(dead_code)]
@@ -42,7 +43,7 @@ impl TableProvider for PostgresTableProvider {
 
     async fn scan(
         &self,
-        _state: &SessionState,
+        _state: &dyn Session,
         _projection: Option<&Vec<usize>>,
         _filters: &[Expr],
         _limit: Option<usize>,

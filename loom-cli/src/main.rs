@@ -44,7 +44,7 @@ struct ExecArgs {
 struct QueryArgs {
     /// SQL query to execute
     sql: String,
-    /// Output format (json, csv, table)
+    /// Output format (csv, table)
     #[clap(long, default_value = "table")]
     format: String,
     /// Output file path (optional, defaults to stdout)
@@ -101,34 +101,6 @@ async fn query_data(loom: Loom, args: QueryArgs) -> Result<(), Error> {
                 },
             })?;
             println!("{}", formatted);
-        }
-        "json" => {
-            // Output as JSON
-            use datafusion::arrow::json::writer::record_batches_to_json_rows;
-            use datafusion::arrow::record_batch::RecordBatch;
-            let batch_refs: Vec<&RecordBatch> = batches.iter().collect();
-            let json_rows = record_batches_to_json_rows(&batch_refs).map_err(|e| Error::Loom {
-                source: loom::error::Error::Generic {
-                    message: e.to_string(),
-                },
-            })?;
-            let json_string =
-                serde_json::to_string_pretty(&json_rows).map_err(|e| Error::Loom {
-                    source: loom::error::Error::Generic {
-                        message: e.to_string(),
-                    },
-                })?;
-
-            if let Some(output_path) = args.output {
-                std::fs::write(output_path, json_string).map_err(|e| Error::Loom {
-                    source: loom::error::Error::Generic {
-                        message: e.to_string(),
-                    },
-                })?;
-                println!("Results written to file");
-            } else {
-                println!("{}", json_string);
-            }
         }
         "csv" => {
             // Output as CSV
