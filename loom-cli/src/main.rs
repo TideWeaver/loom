@@ -30,6 +30,12 @@ enum Commands {
     Ping,
     /// Query data using DataFusion and return as Arrow format
     Query(QueryArgs),
+    /// Export table to Parquet format
+    Export(ExportArgs),
+    /// Import data from Parquet snapshot
+    Import(ImportArgs),
+    /// List available snapshots
+    ListSnapshots(ListSnapshotsArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -52,6 +58,42 @@ struct QueryArgs {
     output: Option<PathBuf>,
 }
 
+#[derive(Debug, clap::Args)]
+#[clap(about = "Export table to Parquet format")]
+struct ExportArgs {
+    /// Database name
+    database: String,
+    /// Table name (format: schema.table or just table)
+    table: String,
+}
+
+#[derive(Debug, clap::Args)]
+#[clap(about = "Import data from Parquet snapshot")]
+struct ImportArgs {
+    /// Database name
+    database: String,
+    /// Table name
+    table: String,
+    /// Snapshot timestamp (optional, defaults to latest)
+    #[clap(long)]
+    snapshot: Option<String>,
+    /// Truncate table before import
+    #[clap(long)]
+    truncate: bool,
+    /// Create table if not exists
+    #[clap(long, default_value_t = true)]
+    create_if_not_exists: bool,
+}
+
+#[derive(Debug, clap::Args)]
+#[clap(about = "List available snapshots")]
+struct ListSnapshotsArgs {
+    /// Database name
+    database: String,
+    /// Table name
+    table: String,
+}
+
 #[derive(Debug, Snafu)]
 enum Error {
     #[snafu(display("Loom error: {source}"))]
@@ -68,6 +110,9 @@ async fn main() -> Result<(), Error> {
         Commands::Exec(exec_args) => execute_query(loom, exec_args).await,
         Commands::Ping => ping_database(loom).await,
         Commands::Query(query_args) => query_data(loom, query_args).await,
+        Commands::Export(export_args) => export_table(loom, export_args).await,
+        Commands::Import(import_args) => import_snapshot(loom, import_args).await,
+        Commands::ListSnapshots(list_args) => list_snapshots(loom, list_args).await,
     }
 }
 
@@ -141,6 +186,99 @@ async fn query_data(loom: Loom, args: QueryArgs) -> Result<(), Error> {
                     message: format!("Unsupported format: {}", args.format),
                 },
             });
+        }
+    }
+
+    Ok(())
+}
+
+async fn export_table(loom: Loom, args: ExportArgs) -> Result<(), Error> {
+    // Parse schema.table format
+    let (schema, table) = if args.table.contains('.') {
+        let parts: Vec<&str> = args.table.split('.').collect();
+        (Some(parts[0]), parts[1])
+    } else {
+        (None, args.table.as_str())
+    };
+
+    println!(
+        "Exporting table {}.{} from database {}...",
+        schema.unwrap_or("public"),
+        table,
+        args.database
+    );
+
+    let metadata = loom
+        .export_table(&args.database, schema, table)
+        .await
+        .context(LoomSnafu)?;
+
+    println!("Export completed successfully!");
+    println!("Snapshot time: {}", metadata.snapshot_time);
+    println!("Row count: {}", metadata.table_info.row_count);
+    println!("Snapshot path: {}", metadata.get_snapshot_path(""));
+
+    Ok(())
+}
+
+async fn import_snapshot(loom: Loom, args: ImportArgs) -> Result<(), Error> {
+    // First, list available snapshots if no specific snapshot provided
+    let snapshot_path = if let Some(snapshot) = args.snapshot {
+        format!("{}_{}/{}", args.database, args.table, snapshot)
+    } else {
+        // Get the latest snapshot
+        let snapshots = loom
+            .list_snapshots(&args.database, &args.table)
+            .await
+            .context(LoomSnafu)?;
+
+        if snapshots.is_empty() {
+            println!(
+                "No snapshots found for table {}.{}",
+                args.database, args.table
+            );
+            return Ok(());
+        }
+
+        format!("{}_{}/{}", args.database, args.table, snapshots[0])
+    };
+
+    println!("Importing from snapshot: {}", snapshot_path);
+
+    let options = loom::parquet::ImportOptions {
+        truncate_before_import: args.truncate,
+        create_table_if_not_exists: args.create_if_not_exists,
+        ..Default::default()
+    };
+
+    let row_count = loom
+        .import_snapshot(&snapshot_path, options)
+        .await
+        .context(LoomSnafu)?;
+
+    println!("Import completed successfully!");
+    println!("Rows imported: {}", row_count);
+
+    Ok(())
+}
+
+async fn list_snapshots(loom: Loom, args: ListSnapshotsArgs) -> Result<(), Error> {
+    println!(
+        "Listing snapshots for table {}.{}",
+        args.database, args.table
+    );
+
+    let snapshots = loom
+        .list_snapshots(&args.database, &args.table)
+        .await
+        .context(LoomSnafu)?;
+
+    if snapshots.is_empty() {
+        println!("No snapshots found.");
+    } else {
+        println!("Available snapshots:");
+        for (i, snapshot) in snapshots.iter().enumerate() {
+            println!("  {}. {}", i + 1, snapshot);
         }
     }
 

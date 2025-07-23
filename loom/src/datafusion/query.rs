@@ -97,6 +97,7 @@ impl Clone for Loom {
     fn clone(&self) -> Self {
         Loom {
             pool: self.pool.clone(),
+            storage_config: self.storage_config.clone(),
         }
     }
 }

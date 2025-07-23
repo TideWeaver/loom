@@ -1,229 +1,247 @@
-# Loom
+# Data-Loom
 
-Loom 是一个基于 Rust 的数据库交互工具，集成了 DataFusion 查询引擎，提供高性能的数据查询和处理能力。
+A high-performance database migration and data export/import tool written in Rust. Data-Loom supports both PostgreSQL and MySQL databases and provides efficient data export to Parquet format for archival, analysis, and migration purposes.
 
-## 特性
+## Features
 
-- 🚀 PostgreSQL 连接池支持
-- 📊 集成 Apache Arrow DataFusion 查询引擎
-- 🔧 灵活的配置方式（YAML 文件或环境变量）
-- 📁 多种输出格式（表格、CSV）
-- ⚡ 异步执行，高性能
+- 🚀 **High Performance**: Built with Rust for maximum speed and efficiency
+- 🗄️ **Multi-Database Support**: Works with both PostgreSQL and MySQL
+- 📦 **Parquet Export/Import**: Export tables to efficient Parquet format
+- 🔄 **Full Data Preservation**: Maintains data types, nulls, and constraints
+- 📊 **DataFusion Integration**: Query data using SQL with Apache Arrow
+- 🛡️ **Type Safe**: Leverages Rust's type system for reliability
+- 📁 **Snapshot Management**: Timestamped snapshots for version control
+- ☁️ **Flexible Storage**: Supports local filesystem and S3
 
-## 安装
-
-### 从源码构建
+## Installation
 
 ```bash
-# 克隆仓库
-git clone https://github.com/yourusername/loom.git
-cd loom
+# Clone the repository
+git clone https://github.com/yourusername/data-loom.git
+cd data-loom
 
-# 构建项目
+# Build the project
 cargo build --release
 
-# 运行测试
-cargo test
+# The binary will be available at target/release/data-loom
 ```
 
-## 配置
+## Quick Start
 
-Loom 支持两种配置方式：
+### Configuration
 
-### 1. 配置文件（推荐）
-
-在项目根目录创建 `config.yml` 或 `config.yaml`：
+Create a `config.yml` file:
 
 ```yaml
-database_url: "postgresql://username:password@localhost:5432/dbname"
+# For PostgreSQL
+database:
+  type: postgres
+  url: "postgresql://user:password@localhost:5432/mydb"
+
+# For MySQL
+database:
+  type: mysql
+  url: "mysql://user:password@localhost:3306/mydb"
+
+storage:
+  type: local
+  path: "./data/snapshots"
 ```
 
-### 2. 环境变量
+### Basic Commands
 
 ```bash
-# 使用 LOOM_ 前缀
-export LOOM_DATABASE_URL="postgresql://username:password@localhost:5432/dbname"
+# Test database connection
+data-loom ping
 
-# 或者在 .env 文件中设置（用于开发）
-echo 'DATABASE_URL="postgresql://username:password@localhost:5432/dbname"' > .env
+# Execute SQL query
+data-loom exec "SELECT COUNT(*) FROM users"
+
+# Export a table
+data-loom export mydb users
+
+# Import from snapshot
+data-loom import mydb users
+
+# List available snapshots
+data-loom list-snapshots mydb users
 ```
 
-### 配置优先级
+## Export/Import Usage
 
-1. 环境变量（LOOM_ 前缀）
-2. 配置文件（config.yml/config.yaml）
-3. 默认值
+### Exporting Data
 
-## 使用方法
-
-### CLI 命令
+Export a complete table to Parquet format:
 
 ```bash
-# 测试数据库连接
-loom ping
+# Export with schema (PostgreSQL)
+data-loom export mydb public.users
 
-# 执行 SQL 查询
-loom exec "SELECT * FROM users LIMIT 10"
-
-# 使用 DataFusion 查询（默认表格输出）
-loom query "SELECT 1 as num, 'hello' as text"
-
-# 输出为 CSV 格式
-loom query "SELECT * FROM generate_series(1,10)" --format csv
-
-# 保存查询结果到文件
-loom query "SELECT * FROM data" --format csv --output results.csv
-
-# 指定配置文件路径
-loom --config /path/to/config.yml ping
+# Export without schema (MySQL or default schema)
+data-loom export mydb users
 ```
 
-### 作为库使用
-
-在 `Cargo.toml` 中添加依赖：
-
-```toml
-[dependencies]
-loom = "0.0.1"
-tokio = { version = "1", features = ["full"] }
+This creates a timestamped snapshot:
+```
+data/snapshots/
+└── mydb_users/
+    └── 2024-01-15_10-30-45/
+        ├── data.parquet
+        └── metadata.json
 ```
 
-示例代码：
+### Importing Data
 
-```rust
-use loom::Loom;
-use std::sync::Arc;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 从配置文件初始化
-    let loom = Loom::new_from_config(".").await?;
-    
-    // 执行 SQL 查询
-    loom.execute_sql("SELECT 1").await?;
-    
-    // 使用 DataFusion 查询引擎
-    let engine = Arc::new(loom).query_engine().await?;
-    let batches = engine.query_to_arrow("SELECT 1 as num, 2 as value").await?;
-    
-    // 处理查询结果
-    for batch in batches {
-        println!("行数: {}", batch.num_rows());
-    }
-    
-    Ok(())
-}
-```
-
-## DataFusion 集成
-
-Loom 集成了 Apache Arrow DataFusion，提供强大的查询能力：
-
-### 支持的功能
-
-- SQL 查询执行
-- Arrow 格式数据处理
-- 内置函数支持（数学、字符串、日期等）
-- 生成序列等特殊功能
-
-### 示例查询
-
-```sql
--- 生成序列
-SELECT * FROM generate_series(1, 10);
-
--- 数学计算
-SELECT sin(1.0), cos(1.0), sqrt(16);
-
--- 字符串处理
-SELECT concat('Hello', ' ', 'World');
-
--- 日期处理
-SELECT now(), date_part('year', now());
-```
-
-### 当前限制
-
-- PostgreSQL 表扫描功能尚未实现
-- 如需查询实际的 PostgreSQL 表，请使用 `exec` 命令
-
-## 开发指南
-
-### 项目结构
-
-```
-loom/
-├── loom/               # 核心库
-│   ├── src/
-│   │   ├── lib.rs     # 库入口
-│   │   ├── config.rs  # 配置管理
-│   │   ├── error.rs   # 错误处理
-│   │   └── datafusion/
-│   │       ├── mod.rs      # DataFusion 模块
-│   │       ├── engine.rs   # 查询引擎
-│   │       └── provider.rs # 表提供者（待实现）
-│   └── tests/         # 集成测试
-├── loom-cli/          # CLI 工具
-│   └── src/
-│       └── main.rs    # CLI 入口
-├── examples/          # 示例代码
-└── Cargo.toml        # 工作空间配置
-```
-
-### 运行测试
+Import data back to the database:
 
 ```bash
-# 运行所有测试
+# Import latest snapshot
+data-loom import mydb users
+
+# Import specific snapshot
+data-loom import mydb users --snapshot 2024-01-15_10-30-45
+
+# Import with truncate
+data-loom import mydb users --truncate
+
+# Import without creating table
+data-loom import mydb users --no-create-if-not-exists
+```
+
+## DataFusion Queries
+
+Use SQL to query data with Apache Arrow:
+
+```bash
+# Query with table output
+data-loom query "SELECT * FROM generate_series(1, 10)"
+
+# Export to CSV
+data-loom query "SELECT * FROM generate_series(1, 100)" --format csv --output data.csv
+
+# Output as JSON
+data-loom query "SELECT 1 as id, 'test' as name" --format json
+```
+
+## Supported Data Types
+
+### PostgreSQL
+- Numeric: smallint, integer, bigint, real, double precision, numeric, decimal
+- Text: text, varchar, char
+- Boolean: boolean
+- Temporal: date, timestamp, timestamp with time zone
+- Binary: bytea
+- JSON: json, jsonb
+- Other: uuid
+
+### MySQL
+- Numeric: tinyint, smallint, mediumint, int, bigint, float, double, decimal
+- Text: char, varchar, text, tinytext, mediumtext, longtext
+- Boolean: boolean, bit
+- Temporal: date, datetime, timestamp
+- Binary: binary, varbinary, blob, tinyblob, mediumblob, longblob
+- JSON: json
+
+## Storage Configuration
+
+### Local Storage
+```yaml
+storage:
+  type: local
+  path: "./data/snapshots"
+```
+
+### S3 Storage
+```yaml
+storage:
+  type: s3
+  bucket: "my-loom-snapshots"
+  prefix: "snapshots"
+  region: "us-east-1"  # optional
+```
+
+## Development
+
+### Building from Source
+
+```bash
+# Development build
+cargo build
+
+# Release build
+cargo build --release
+
+# Run tests
 cargo test
 
-# 运行集成测试（需要设置 DATABASE_URL）
-DATABASE_URL="postgresql://..." cargo test --test it
-
-# 运行特定测试
-cargo test config_from_file
+# Run with Docker test environment
+./scripts/run_all_tests.sh
 ```
 
-### 代码格式化
+### Testing
 
 ```bash
-# 格式化 Rust 代码
-cargo fmt
+# Unit tests
+cargo test --lib
 
-# 检查代码规范
-cargo clippy
+# Integration tests (requires DATABASE_URL)
+DATABASE_URL=postgresql://localhost/test cargo test --test it
 
-# 格式化 TOML 文件
-taplo fmt
+# E2E tests
+PG_DATABASE_URL=postgresql://localhost/test cargo test --test e2e_export_import
+
+# Full test suite with Docker
+docker-compose -f docker-compose.test.yml up -d
+./scripts/run_all_tests.sh
 ```
 
-### 示例程序
+## Architecture
 
-运行 DataFusion 查询示例：
+Data-Loom consists of two main components:
 
-```bash
-cargo run --example datafusion_query
-```
+1. **Core Library (`loom`)**: Handles database operations, export/import logic
+2. **CLI (`data-loom`)**: Command-line interface for user interaction
 
-## 环境要求
+The export process:
+1. Reads table metadata (columns, types, constraints)
+2. Streams data in configurable batches
+3. Converts to Apache Arrow format
+4. Writes to Parquet files
+5. Saves metadata for reconstruction
 
-- Rust 1.75+
-- PostgreSQL 12+
-- Tokio 运行时
+The import process:
+1. Reads metadata from snapshot
+2. Creates table if needed (matching original schema)
+3. Reads Parquet data in batches
+4. Inserts data preserving types and nulls
 
-## 贡献指南
+## Use Cases
 
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add some amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
+- **Database Migration**: Migrate data between different database systems
+- **Backup & Archive**: Create efficient backups in Parquet format
+- **Data Analysis**: Export data for analysis in data science tools
+- **Development**: Copy production data to development environments
+- **Testing**: Create reproducible test datasets
 
-## 许可证
+## Contributing
 
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 致谢
+### Development Setup
 
-- [Apache Arrow](https://arrow.apache.org/) - 列式内存格式
-- [DataFusion](https://arrow.apache.org/datafusion/) - SQL 查询引擎
-- [SQLx](https://github.com/launchbadge/sqlx) - 异步 SQL 工具包
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- [Apache Arrow](https://arrow.apache.org/) - Columnar memory format
+- [DataFusion](https://arrow.apache.org/datafusion/) - SQL query engine
+- [SQLx](https://github.com/launchbadge/sqlx) - Async SQL toolkit
+- [Parquet](https://parquet.apache.org/) - Columnar storage format

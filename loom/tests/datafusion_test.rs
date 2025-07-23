@@ -27,7 +27,7 @@ async fn test_query_engine_creation() {
         .query_to_arrow("SELECT 'test' as msg")
         .await
         .expect("Failed to execute test query");
-    
+
     assert_eq!(result.len(), 1);
     println!("QueryEngine created successfully");
 }

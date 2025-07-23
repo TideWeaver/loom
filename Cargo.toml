@@ -18,3 +18,4 @@ arrow-schema = { version = "55.2.0", features = ["serde"] }
 arrow-json = "55.0.0"
 arrow-odbc = { version = "16.0.2" }
 datafusion = { version = "48", default-features = false }
+parquet = { version = "55.0.0" }

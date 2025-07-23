@@ -4,15 +4,24 @@ name = "loom"
 version = "0.0.1"
 
 [dependencies]
+arrow = { workspace = true }
+arrow-schema = { workspace = true }
 async-trait = "0.1"
+bytes = "1.8"
+chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5.38", features = ["derive", "cargo"] }
 config = "0.15.11"
 datafusion = { workspace = true }
+futures = "0.3"
+object_store = { version = "0.11", features = ["aws"] }
+parquet = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 snafu = { workspace = true }
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "postgres", "mysql", "chrono"] }
 tokio = { workspace = true }
+tokio-postgres = "0.7"
+uuid = { version = "1.11", features = ["v4", "serde"] }
 
 [dev-dependencies]
 dotenvy = "0.15"

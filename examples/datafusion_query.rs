@@ -23,27 +23,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 1: Simple SELECT query
     println!("\n=== Example 1: Simple SELECT ===");
-    let result = engine.query_to_arrow("SELECT 1 as num, 'Hello' as greeting").await?;
-    
+    let result = engine
+        .query_to_arrow("SELECT 1 as num, 'Hello' as greeting")
+        .await?;
+
     use datafusion::arrow::util::pretty::pretty_format_batches;
     let formatted = pretty_format_batches(&result)?;
     println!("{}", formatted);
 
     // Example 2: Query with calculations
     println!("\n=== Example 2: Calculations ===");
-    let result = engine.query_to_arrow("SELECT 
+    let result = engine
+        .query_to_arrow(
+            "SELECT 
         10 + 5 as addition,
         20 - 3 as subtraction,
         4 * 7 as multiplication,
         100.0 / 3.0 as division
-    ").await?;
-    
+    ",
+        )
+        .await?;
+
     let formatted = pretty_format_batches(&result)?;
     println!("{}", formatted);
 
     // Example 3: Using VALUES clause
     println!("\n=== Example 3: VALUES clause ===");
-    let result = engine.query_to_arrow("
+    let result = engine
+        .query_to_arrow(
+            "
         SELECT * FROM (
             VALUES 
                 (1, 'Alice', 30),
@@ -52,18 +60,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ) as users(id, name, age)
         WHERE age > 26
         ORDER BY age DESC
-    ").await?;
-    
+    ",
+        )
+        .await?;
+
     let formatted = pretty_format_batches(&result)?;
     println!("{}", formatted);
 
     // Example 4: Get DataFrame for further processing
     println!("\n=== Example 4: DataFrame processing ===");
-    let df = engine.query_to_dataframe("SELECT 1 as x, 2 as y UNION ALL SELECT 3, 4 UNION ALL SELECT 5, 6").await?;
-    
+    let df = engine
+        .query_to_dataframe("SELECT 1 as x, 2 as y UNION ALL SELECT 3, 4 UNION ALL SELECT 5, 6")
+        .await?;
+
     // Add a computed column
-    let df_with_sum = df.with_column("sum", datafusion::prelude::col("x") + datafusion::prelude::col("y"))?;
-    
+    let df_with_sum = df.with_column(
+        "sum",
+        datafusion::prelude::col("x") + datafusion::prelude::col("y"),
+    )?;
+
     // Collect results
     let results = df_with_sum.collect().await?;
     let formatted = pretty_format_batches(&results)?;

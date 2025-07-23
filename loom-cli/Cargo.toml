@@ -12,5 +12,5 @@ snafu = { workspace = true }
 tokio = { workspace = true }
 
 [[bin]]
-name = "loom"
+name = "data-loom"
 path = "src/main.rs"

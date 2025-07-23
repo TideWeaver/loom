@@ -1,9 +1,28 @@
 # Loom 配置文件示例
 # 将此文件复制为 config.yml 并修改数据库连接信息
 
-# PostgreSQL 数据库连接 URL
-# 格式: postgresql://[用户名]:[密码]@[主机]:[端口]/[数据库名]
-database_url: "postgresql://username:password@localhost:5432/dbname"
+# 数据库配置
+# PostgreSQL 示例:
+database:
+  type: postgres
+  url: "postgresql://username:password@localhost:5432/dbname"
+
+# MySQL 示例:
+# database:
+#   type: mysql
+#   url: "mysql://username:password@localhost:3306/dbname"
+
+# 存储配置（可选，默认使用本地存储）
+storage:
+  # 本地存储配置
+  type: local
+  path: "./data/snapshots"
+  
+  # S3 存储配置示例
+  # type: s3
+  # bucket: "my-loom-snapshots"
+  # prefix: "snapshots"
+  # region: "us-east-1"  # 可选
 
 # 可选配置（未来扩展）
 # pool_size: 10
