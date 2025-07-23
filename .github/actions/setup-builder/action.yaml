@@ -1,0 +1,39 @@
+name: Prepare Rust Builder
+description: 'Prepare Rust Build Environment'
+inputs:
+  rust-version:
+    description: 'version of rust to install and use'
+runs:
+  using: "composite"
+  steps:
+    - name: Setup specified Rust toolchain
+      shell: bash
+      if: ${{ inputs.rust-version != '' }}
+      env:
+        RUST_VERSION: ${{ inputs.rust-version }}
+      run: |
+        echo "Installing ${RUST_VERSION}"
+        rustup toolchain install ${RUST_VERSION}
+        rustup override set ${RUST_VERSION}
+        rustup component add rustfmt clippy
+    - name: Setup Rust toolchain according to rust-toolchain.toml
+      shell: bash
+      if: ${{ inputs.rust-version == '' }}
+      run: |
+        echo "Installing toolchain according to rust-toolchain.toml"
+        rustup show
+        rustup component add rustfmt clippy
+    - name: Setup Rust cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        # An explicit cache key that is used instead of the automatic `job`-based key
+        prefix-key: "v1-rust"
+        # Additional directories to cache
+        cache-directories: |
+          ~/.cargo/bin/
+        # Determines if the cache should be saved even when the workflow fails
+        cache-on-failure: true
+    - name: Fixup git permissions
+      # https://github.com/actions/checkout/issues/766
+      shell: bash
+      run: git config --global --add safe.directory "$GITHUB_WORKSPACE"

@@ -14,8 +14,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
+  rust_msrv: "stable"
 
 jobs:
   check:
@@ -24,26 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust Builder
+        uses: ./.github/actions/setup-builder
         with:
-          components: rustfmt, clippy
-      
-      # Setup sccache for faster compilation
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-      
-      # Cache dependencies
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
+          rust-version: ${{ env.rust_msrv }}
       
       # Install additional tools
       - uses: taiki-e/install-action@v2
@@ -85,26 +68,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust Builder
+        uses: ./.github/actions/setup-builder
         with:
-          targets: ${{ matrix.target }}
+          rust-version: ${{ env.rust_msrv }}
       
-      # Setup sccache
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.7.1"
-      
-      # Cache the cargo build directory
-      - name: Cache cargo build
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.target }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-
-            ${{ runner.os }}-cargo-build-
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
       
       - name: Build debug
         run: cargo build --verbose --all-features --target ${{ matrix.target }}
@@ -123,7 +96,7 @@ jobs:
       
       # Upload artifacts for later use
       - name: Upload binary
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: data-loom-${{ matrix.target }}
           path: |
@@ -137,8 +110,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust Builder
+        uses: ./.github/actions/setup-builder
+        with:
+          rust-version: ${{ env.rust_msrv }}
       
       - name: Run cargo audit
         uses: actions-rs/audit-check@v1

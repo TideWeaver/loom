@@ -14,6 +14,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  rust_msrv: "stable"
 
 jobs:
   create-release:
@@ -118,29 +119,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust Builder
+        uses: ./.github/actions/setup-builder
         with:
-          targets: ${{ matrix.target }}
+          rust-version: ${{ env.rust_msrv }}
+      
+      - name: Install system dependencies
+        if: runner.os == 'Linux' && !matrix.use_cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+      
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
       
       # Install cross-compilation tool if needed
       - name: Install Cross
         if: matrix.use_cross
         run: |
           cargo install cross --git https://github.com/cross-rs/cross
-      
-      # Cache cargo registry
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-registry-release-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-release-
-            ${{ runner.os }}-cargo-registry-
       
       # Build the binary
       - name: Build release binary
@@ -215,28 +212,6 @@ jobs:
           asset_name: data-loom-${{ matrix.name }}.zip.sha256
           asset_content_type: text/plain
 
-  publish-crate:
-    name: Publish to crates.io
-    needs: [create-release, build-release]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          # Publish library crate first
-          cargo publish -p loom --token $CARGO_REGISTRY_TOKEN || true
-          # Wait a bit for crates.io to index
-          sleep 30
-          # Then publish CLI crate
-          cargo publish -p loom-cli --token $CARGO_REGISTRY_TOKEN || true
-        continue-on-error: true
-
   publish-release:
     name: Publish Release
     needs: [create-release, build-release]
@@ -245,7 +220,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Publish release
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

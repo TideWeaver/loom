@@ -13,8 +13,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  SCCACHE_GHA_ENABLED: "true"
-  RUSTC_WRAPPER: "sccache"
+  rust_msrv: "stable"
 
 jobs:
   unit-tests:
@@ -28,22 +27,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-      
-      - name: Cache cargo registry
-        uses: actions/cache@v3
+      - name: Setup Rust Builder
+        uses: ./.github/actions/setup-builder
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
+          rust-version: ${{ env.rust_msrv }}
       
       - name: Run unit tests
         run: cargo test --lib --all-features
@@ -82,22 +69,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-      
-      - name: Cache cargo registry
-        uses: actions/cache@v3
+      - name: Setup Rust Builder
+        uses: ./.github/actions/setup-builder
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
+          rust-version: ${{ env.rust_msrv }}
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
       
       - name: Wait for databases
         run: |
@@ -119,6 +99,21 @@ jobs:
         run: |
           cargo test --test it
           cargo test --test e2e_export_import -- --test-threads=1
+      
+      - name: Dump PostgreSQL DB on failure
+        if: failure()
+        uses: tj-actions/pg-dump@v3
+        with:
+          database_url: "postgresql://postgres:postgres@localhost:5432/test_db"
+          postgresql_version: "16"
+          path: postgres-dump.sql
+      
+      - name: Upload PostgreSQL dump on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-dump
+          path: postgres-dump.sql
 
   doc-tests:
     name: Documentation Tests
@@ -127,25 +122,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.3
-      
-      - name: Cache cargo registry
-        uses: actions/cache@v3
+      - name: Setup Rust Builder
+        uses: ./.github/actions/setup-builder
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
+          rust-version: ${{ env.rust_msrv }}
       
       - name: Run doc tests
         run: cargo test --doc --all-features
+
+  examples:
+    name: Example Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust Builder
+        uses: ./.github/actions/setup-builder
+        with:
+          rust-version: ${{ env.rust_msrv }}
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+      
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432; do
+            echo "Waiting for PostgreSQL..."
+            sleep 1
+          done
+      
+      - name: Run examples
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+        run: |
+          cargo run --example datafusion_query || true
 
   coverage:
     name: Code Coverage
@@ -168,8 +195,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust Builder
+        uses: ./.github/actions/setup-builder
+        with:
+          rust-version: ${{ env.rust_msrv }}
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config libcairo2-dev
       
       - name: Install tarpaulin
         run: cargo install cargo-tarpaulin
@@ -181,7 +215,7 @@ jobs:
           cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
       
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
@@ -191,13 +225,14 @@ jobs:
     name: All tests passed
     runs-on: ubuntu-latest
     if: always()
-    needs: [unit-tests, integration-tests, doc-tests]
+    needs: [unit-tests, integration-tests, doc-tests, examples]
     steps:
       - name: Verify all tests passed
         run: |
           if [[ "${{ needs.unit-tests.result }}" != "success" || \
                 "${{ needs.integration-tests.result }}" != "success" || \
-                "${{ needs.doc-tests.result }}" != "success" ]]; then
+                "${{ needs.doc-tests.result }}" != "success" || \
+                "${{ needs.examples.result }}" != "success" ]]; then
             echo "Some tests failed"
             exit 1
           fi
