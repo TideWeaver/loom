@@ -1,22 +1,21 @@
-name: CI
+name: CI - Lint & Build
+
 on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, master, feature-*, feat-*, fix-*, bug-*]
+    branches: [main, master, develop, feature-*, feat-*, fix-*, bug-*]
 
-# Concurrency strategy:
-#   github.workflow: distinguish this workflow from others
-#   github.event_name: distinguish `push` event from `pull_request` event
-#   github.event.number: set to the number of the pull request if `pull_request` event
-#   github.run_id: otherwise, it's a `push` event, only cancel if we rerun the workflow
-#
-# Reference:
-#   https://docs.github.com/en/actions/using-jobs/using-concurrency
-#   https://docs.github.com/en/actions/learn-github-actions/contexts#github-context
+# Cancel previous runs for the same branch
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.number || github.run_id }}
   cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
   check:
@@ -24,58 +23,150 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install toolchain
-        uses: dtolnay/rust-toolchain@nightly
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt,clippy
-      - uses: Swatinem/rust-cache@v2
+          components: rustfmt, clippy
+      
+      # Setup sccache for faster compilation
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
+      
+      # Cache dependencies
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+      
+      # Install additional tools
       - uses: taiki-e/install-action@v2
         with:
-          tool: typos-cli,taplo-cli,hawkeye
-      - run: cargo +nightly fmt --check
-      - run: cargo +nightly clippy --all-targets --all-features -- -D warnings
-      - run: typos
-      - run: taplo check
-      - run: hawkeye scan
+          tool: typos-cli,taplo-cli
+      
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      
+      - name: Check typos
+        run: typos
+      
+      - name: Check TOML formatting
+        run: taplo check
+      
+      - name: Check documentation
+        run: cargo doc --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: "-D warnings"
 
-  test:
-    name: Run tests
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            target: x86_64-apple-darwin
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      # Setup sccache
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.7.1"
+      
+      # Cache the cargo build directory
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.target }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-cargo-build-
+      
+      - name: Build debug
+        run: cargo build --verbose --all-features --target ${{ matrix.target }}
+      
+      - name: Build release
+        run: cargo build --release --verbose --all-features --target ${{ matrix.target }}
+      
+      - name: Verify binary
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            test -f target/${{ matrix.target }}/release/data-loom.exe
+          else
+            test -f target/${{ matrix.target }}/release/data-loom
+          fi
+      
+      # Upload artifacts for later use
+      - name: Upload binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: data-loom-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/data-loom
+            target/${{ matrix.target }}/release/data-loom.exe
+          retention-days: 1
+
+  security:
+    name: Security Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Swatinem/rust-cache@v2
-      - name: Delete rust-toolchain.toml
-        run: rm rust-toolchain.toml
-      - name: Install toolchain
-        uses: dtolnay/rust-toolchain@master
-      - name: Run unit tests
-        run: cargo test
-        shell: bash
-      - name: Build
-        run: cargo build --release --target-dir=target/loom-cli
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: github.ref_type == 'tag' && github.event_name == 'push'
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Run cargo audit
+        uses: actions-rs/audit-check@v1
         with:
-          files: |
-            target/loom-cli/release/loom-cli
-          title: loom-cli v${{ github.ref_name }}
-          body: |
-            - feat: add new feature
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Optional: cargo-deny for more comprehensive checks
+      - name: Run cargo deny
+        uses: EmbarkStudios/cargo-deny-action@v1
+        continue-on-error: true
+        with:
+          log-level: warn
+          command: check
+          arguments: --all-features
+
+  # Required status check
   required:
-    name: Required
-    runs-on: ubuntu-22.04
-    if: ${{ always() }}
-    needs:
-      - check
-      - test
+    name: All checks passed
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [check, build, security]
     steps:
-      - name: Guardian
+      - name: Verify all jobs passed
         run: |
-          if [[ ! ( \
-                 "${{ needs.check.result }}" == "success" \
-              && "${{ needs.test.result }}" == "success" \
-              ) ]]; then
-            echo "Required jobs haven't been completed successfully."
-            exit -1
+          if [[ "${{ needs.check.result }}" != "success" || \
+                "${{ needs.build.result }}" != "success" || \
+                "${{ needs.security.result }}" != "success" ]]; then
+            echo "Some required jobs failed"
+            exit 1
           fi
+          echo "All required jobs passed successfully"

@@ -204,7 +204,7 @@ impl PostgresImporter {
         for row_idx in 0..num_rows {
             let mut query = sqlx::query(&insert_sql);
 
-            for (_col_idx, column) in batch.columns().iter().enumerate() {
+            for column in batch.columns().iter() {
                 query = match column.data_type() {
                     DataType::Int16 => {
                         let array = column.as_any().downcast_ref::<Int16Array>().unwrap();
@@ -519,7 +519,7 @@ impl MysqlImporter {
         for row_idx in 0..num_rows {
             let mut query = sqlx::query(&insert_sql);
 
-            for (_col_idx, column) in batch.columns().iter().enumerate() {
+            for column in batch.columns().iter() {
                 query = match column.data_type() {
                     DataType::Int16 => {
                         let array = column.as_any().downcast_ref::<Int16Array>().unwrap();

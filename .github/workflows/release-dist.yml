@@ -1,0 +1,119 @@
+# Alternative release workflow using cargo-dist
+# This is a mature solution specifically designed for Rust projects
+
+name: Release with cargo-dist
+
+on:
+  push:
+    tags:
+      - 'dist-v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      has-releases: ${{ steps.plan.outputs.has-releases }}
+      releases: ${{ steps.plan.outputs.releases }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Install cargo-dist
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/latest/download/cargo-dist-installer.sh | sh
+      
+      - name: Plan release
+        id: plan
+        run: |
+          cargo dist plan --output-format=json > dist-plan.json
+          echo "has-releases=$(jq -r '.releases != null' dist-plan.json)" >> $GITHUB_OUTPUT
+          echo "releases=$(jq -c '.releases' dist-plan.json)" >> $GITHUB_OUTPUT
+          cat dist-plan.json
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.has-releases == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            dist-args: --artifacts=global
+          - os: ubuntu-latest
+            dist-args: --artifacts=local --target=x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            dist-args: --artifacts=local --target=x86_64-unknown-linux-musl
+          - os: ubuntu-latest
+            dist-args: --artifacts=local --target=aarch64-unknown-linux-gnu
+          - os: macos-latest
+            dist-args: --artifacts=local --target=x86_64-apple-darwin
+          - os: macos-latest
+            dist-args: --artifacts=local --target=aarch64-apple-darwin
+          - os: windows-latest
+            dist-args: --artifacts=local --target=x86_64-pc-windows-msvc
+          - os: windows-latest
+            dist-args: --artifacts=local --target=i686-pc-windows-msvc
+    
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Install cargo-dist
+        run: |
+          ${{ matrix.os == 'windows-latest' && 'irm' || 'curl --proto ''=https'' --tlsv1.2 -LsSf' }} https://github.com/axodotdev/cargo-dist/releases/latest/download/cargo-dist-installer.sh | ${{ matrix.os == 'windows-latest' && 'iex' || 'sh' }}
+      
+      - name: Build artifacts
+        run: |
+          cargo dist build ${{ matrix.dist-args }}
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: artifacts-${{ matrix.os }}-${{ matrix.dist-args }}
+          path: target/distrib/
+
+  publish:
+    needs: [plan, build]
+    if: needs.plan.outputs.has-releases == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      
+      - name: Install cargo-dist
+        run: |
+          curl --proto '=https' --tlsv1.2 -LsSf https://github.com/axodotdev/cargo-dist/releases/latest/download/cargo-dist-installer.sh | sh
+      
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cargo dist host --steps=upload --steps=release --artifacts-dir=artifacts
+
+  update-homebrew:
+    needs: publish
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Update Homebrew formula
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # cargo-dist can automatically update homebrew formulas
+          echo "Homebrew update handled by cargo-dist"

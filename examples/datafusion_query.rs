@@ -9,7 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create Loom instance from environment variables
     println!("Creating Loom instance...");
     let loom = match std::env::var("DATABASE_URL") {
-        Ok(url) => Loom::new_from_url(&url).await?,
+        Ok(url) => Loom::new_from_url(&url, "my_query_name").await?,
         Err(_) => {
             eprintln!("DATABASE_URL environment variable not set");
             eprintln!("Set it with: export DATABASE_URL=postgresql://user:pass@localhost/db");

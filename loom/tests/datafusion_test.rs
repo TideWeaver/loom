@@ -13,7 +13,7 @@ async fn test_query_engine_creation() {
         return;
     }
 
-    let loom = Loom::new_from_url(&database_url.unwrap())
+    let loom = Loom::new_from_url(&database_url.unwrap(), "postgres")
         .await
         .expect("Failed to create Loom instance");
 
@@ -40,7 +40,7 @@ async fn test_simple_query() {
         return;
     }
 
-    let loom = Loom::new_from_url(&database_url.unwrap())
+    let loom = Loom::new_from_url(&database_url.unwrap(), "postgres")
         .await
         .expect("Failed to create Loom instance");
 

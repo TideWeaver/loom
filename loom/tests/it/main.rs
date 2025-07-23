@@ -55,12 +55,15 @@ impl TestResult {
 // 测试配置结构
 async fn test_config_deserialize() -> TestResult {
     let config_str = r#"
-database_url: "postgresql://test:test@localhost/test"
+database:
+  type: postgres
+  url: "postgresql://test:test@localhost/test"
 "#;
 
     match serde_yaml::from_str::<Config>(config_str) {
         Ok(config) => {
-            if config.database_url == "postgresql://test:test@localhost/test" {
+            if matches!(config.database, loom::DatabaseConfig::Postgres { url } if url == "postgresql://test:test@localhost/test")
+            {
                 TestResult::passed("test_config_deserialize")
             } else {
                 TestResult::failed(
@@ -102,7 +105,7 @@ async fn test_loom_new_from_config() -> TestResult {
     };
 
     let config_path = temp_dir.path().join("config.yml");
-    let config_content = format!("database_url: \"{}\"", database_url);
+    let config_content = format!("database:\n  type: postgres\n  url: \"{}\"", database_url);
 
     if let Err(e) = std::fs::write(&config_path, config_content) {
         return TestResult::failed(
@@ -142,7 +145,7 @@ async fn test_execute_sql() -> TestResult {
         }
     };
 
-    let config_content = format!("database_url: \"{}\"", database_url);
+    let config_content = format!("database:\n  type: postgres\n  url: \"{}\"", database_url);
     if let Err(e) = std::fs::write(temp_dir.path().join("config.yml"), config_content) {
         return TestResult::failed(
             "test_execute_sql",
@@ -191,7 +194,7 @@ async fn test_table_operations() -> TestResult {
         }
     };
 
-    let config_content = format!("database_url: \"{}\"", database_url);
+    let config_content = format!("database:\n  type: postgres\n  url: \"{}\"", database_url);
     if let Err(e) = std::fs::write(temp_dir.path().join("config.yml"), config_content) {
         return TestResult::failed(
             "test_table_operations",
@@ -265,7 +268,7 @@ async fn test_invalid_sql_error() -> TestResult {
         }
     };
 
-    let config_content = format!("database_url: \"{}\"", database_url);
+    let config_content = format!("database:\n  type: postgres\n  url: \"{}\"", database_url);
     if let Err(e) = std::fs::write(temp_dir.path().join("config.yml"), config_content) {
         return TestResult::failed(
             "test_invalid_sql_error",
@@ -307,7 +310,7 @@ async fn test_invalid_config_path() -> TestResult {
 // 测试错误处理 - 无效的数据库 URL
 async fn test_invalid_database_url() -> TestResult {
     // 直接使用无效的 URL 测试，不依赖配置文件
-    match Loom::new_from_url("invalid://url").await {
+    match Loom::new_from_url("invalid://url", "postgres").await {
         Ok(_) => TestResult::failed(
             "test_invalid_database_url",
             "Expected error for invalid database URL but got success".to_string(),
@@ -328,7 +331,8 @@ async fn test_loom_new_from_env() -> TestResult {
 
     // 设置环境变量
     unsafe {
-        std::env::set_var("LOOM_DATABASE_URL", &database_url);
+        std::env::set_var("LOOM_DATABASE__TYPE", "postgres");
+        std::env::set_var("LOOM_DATABASE__URL", &database_url);
     }
 
     match Loom::new_from_env().await {
@@ -350,7 +354,7 @@ async fn test_loom_new_from_url() -> TestResult {
         }
     };
 
-    match Loom::new_from_url(&database_url).await {
+    match Loom::new_from_url(&database_url, "postgres").await {
         Ok(_) => TestResult::passed("test_loom_new_from_url"),
         Err(e) => TestResult::failed(
             "test_loom_new_from_url",
@@ -379,7 +383,7 @@ async fn test_batch_operations() -> TestResult {
         }
     };
 
-    let config_content = format!("database_url: \"{}\"", database_url);
+    let config_content = format!("database:\n  type: postgres\n  url: \"{}\"", database_url);
     if let Err(e) = std::fs::write(temp_dir.path().join("config.yml"), config_content) {
         return TestResult::failed(
             "test_batch_operations",

@@ -1,8 +1,8 @@
 //! End-to-end tests for export/import functionality
 
-use loom::parquet::{ExportOptions, ImportOptions};
 use loom::Loom;
-use sqlx::{Executor, PgPool, MySqlPool};
+use loom::parquet::ImportOptions;
+use sqlx::Executor;
 use std::env;
 
 #[tokio::test]
@@ -13,11 +13,11 @@ async fn test_pg_basic_table_export_import() -> Result<(), Box<dyn std::error::E
         eprintln!("Skipping PostgreSQL test - no PG_DATABASE_URL or DATABASE_URL set");
         return Ok(());
     }
-    
+
     let database_url = database_url.unwrap();
     let loom = Loom::new_from_url(&database_url, "postgres").await?;
     let pool = sqlx::postgres::PgPool::connect(&database_url).await?;
-    
+
     // Create test table with various data types
     pool.execute(
         r#"
@@ -33,7 +33,7 @@ async fn test_pg_basic_table_export_import() -> Result<(), Box<dyn std::error::E
         "#,
     )
     .await?;
-    
+
     // Insert test data
     pool.execute(
         r#"
@@ -45,41 +45,43 @@ async fn test_pg_basic_table_export_import() -> Result<(), Box<dyn std::error::E
         "#,
     )
     .await?;
-    
+
     // Export the table
-    let export_metadata = loom.export_table("postgres", Some("public"), "test_basic").await?;
+    let export_metadata = loom
+        .export_table("postgres", Some("public"), "test_basic")
+        .await?;
     assert_eq!(export_metadata.table_info.row_count, 4);
     assert_eq!(export_metadata.table_info.columns.len(), 6);
-    
+
     // Drop the table
     pool.execute("DROP TABLE test_basic").await?;
-    
+
     // Import the data back
     let import_options = ImportOptions {
         create_table_if_not_exists: true,
         truncate_before_import: false,
         ..Default::default()
     };
-    
+
     let snapshot_path = export_metadata.get_snapshot_path("");
     let imported_rows = loom.import_snapshot(&snapshot_path, import_options).await?;
     assert_eq!(imported_rows, 4);
-    
+
     // Verify the data
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM test_basic")
         .fetch_one(&pool)
         .await?;
     assert_eq!(count, 4);
-    
+
     // Verify specific values
     let name: Option<String> = sqlx::query_scalar("SELECT name FROM test_basic WHERE id = 1")
         .fetch_one(&pool)
         .await?;
     assert_eq!(name, Some("Alice".to_string()));
-    
+
     // Cleanup
     pool.execute("DROP TABLE test_basic").await?;
-    
+
     Ok(())
 }
 
@@ -90,11 +92,11 @@ async fn test_pg_complex_types() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Skipping PostgreSQL complex types test - no database URL set");
         return Ok(());
     }
-    
+
     let database_url = database_url.unwrap();
     let loom = Loom::new_from_url(&database_url, "postgres").await?;
     let pool = sqlx::postgres::PgPool::connect(&database_url).await?;
-    
+
     // Create table with more complex types
     pool.execute(
         r#"
@@ -111,7 +113,7 @@ async fn test_pg_complex_types() -> Result<(), Box<dyn std::error::Error>> {
         "#,
     )
     .await?;
-    
+
     // Insert test data
     pool.execute(
         r#"
@@ -121,32 +123,34 @@ async fn test_pg_complex_types() -> Result<(), Box<dyn std::error::Error>> {
         "#,
     )
     .await?;
-    
+
     // Export
-    let export_metadata = loom.export_table("postgres", Some("public"), "test_complex").await?;
+    let export_metadata = loom
+        .export_table("postgres", Some("public"), "test_complex")
+        .await?;
     assert_eq!(export_metadata.table_info.row_count, 2);
-    
+
     // Drop and reimport
     pool.execute("DROP TABLE test_complex").await?;
-    
+
     let import_options = ImportOptions {
         create_table_if_not_exists: true,
         ..Default::default()
     };
-    
+
     let snapshot_path = export_metadata.get_snapshot_path("");
     let imported_rows = loom.import_snapshot(&snapshot_path, import_options).await?;
     assert_eq!(imported_rows, 2);
-    
+
     // Verify count
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM test_complex")
         .fetch_one(&pool)
         .await?;
     assert_eq!(count, 2);
-    
+
     // Cleanup
     pool.execute("DROP TABLE test_complex").await?;
-    
+
     Ok(())
 }
 
@@ -157,11 +161,11 @@ async fn test_mysql_basic_table_export_import() -> Result<(), Box<dyn std::error
         eprintln!("Skipping MySQL test - no MYSQL_DATABASE_URL set");
         return Ok(());
     }
-    
+
     let database_url = database_url.unwrap();
     let loom = Loom::new_from_url(&database_url, "mysql").await?;
     let pool = sqlx::mysql::MySqlPool::connect(&database_url).await?;
-    
+
     // Create test table
     pool.execute(
         r#"
@@ -177,7 +181,7 @@ async fn test_mysql_basic_table_export_import() -> Result<(), Box<dyn std::error
         "#,
     )
     .await?;
-    
+
     // Insert test data
     pool.execute(
         r#"
@@ -189,36 +193,36 @@ async fn test_mysql_basic_table_export_import() -> Result<(), Box<dyn std::error
         "#,
     )
     .await?;
-    
+
     // Get the database name from the URL
     let db_name = database_url.split('/').last().unwrap_or("test");
-    
+
     // Export the table
     let export_metadata = loom.export_table(db_name, None, "test_basic").await?;
     assert_eq!(export_metadata.table_info.row_count, 4);
-    
+
     // Drop the table
     pool.execute("DROP TABLE test_basic").await?;
-    
+
     // Import the data back
     let import_options = ImportOptions {
         create_table_if_not_exists: true,
         ..Default::default()
     };
-    
+
     let snapshot_path = export_metadata.get_snapshot_path("");
     let imported_rows = loom.import_snapshot(&snapshot_path, import_options).await?;
     assert_eq!(imported_rows, 4);
-    
+
     // Verify the data
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM test_basic")
         .fetch_one(&pool)
         .await?;
     assert_eq!(count, 4);
-    
+
     // Cleanup
     pool.execute("DROP TABLE test_basic").await?;
-    
+
     Ok(())
 }
 
@@ -229,11 +233,11 @@ async fn test_mysql_complex_types() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Skipping MySQL complex types test - no MYSQL_DATABASE_URL set");
         return Ok(());
     }
-    
+
     let database_url = database_url.unwrap();
     let loom = Loom::new_from_url(&database_url, "mysql").await?;
     let pool = sqlx::mysql::MySqlPool::connect(&database_url).await?;
-    
+
     // Create table with various MySQL types
     pool.execute(
         r#"
@@ -253,7 +257,7 @@ async fn test_mysql_complex_types() -> Result<(), Box<dyn std::error::Error>> {
         "#,
     )
     .await?;
-    
+
     // Insert test data
     pool.execute(
         r#"
@@ -263,34 +267,34 @@ async fn test_mysql_complex_types() -> Result<(), Box<dyn std::error::Error>> {
         "#,
     )
     .await?;
-    
+
     let db_name = database_url.split('/').last().unwrap_or("test");
-    
+
     // Export
     let export_metadata = loom.export_table(db_name, None, "test_complex").await?;
     assert_eq!(export_metadata.table_info.row_count, 2);
-    
+
     // Drop and reimport
     pool.execute("DROP TABLE test_complex").await?;
-    
+
     let import_options = ImportOptions {
         create_table_if_not_exists: true,
         ..Default::default()
     };
-    
+
     let snapshot_path = export_metadata.get_snapshot_path("");
     let imported_rows = loom.import_snapshot(&snapshot_path, import_options).await?;
     assert_eq!(imported_rows, 2);
-    
+
     // Verify count
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM test_complex")
         .fetch_one(&pool)
         .await?;
     assert_eq!(count, 2);
-    
+
     // Cleanup
     pool.execute("DROP TABLE test_complex").await?;
-    
+
     Ok(())
 }
 
@@ -301,11 +305,11 @@ async fn test_large_table_export_import() -> Result<(), Box<dyn std::error::Erro
         eprintln!("Skipping large table test - no database URL set");
         return Ok(());
     }
-    
+
     let database_url = database_url.unwrap();
     let loom = Loom::new_from_url(&database_url, "postgres").await?;
     let pool = sqlx::postgres::PgPool::connect(&database_url).await?;
-    
+
     // Create table
     pool.execute(
         r#"
@@ -318,7 +322,7 @@ async fn test_large_table_export_import() -> Result<(), Box<dyn std::error::Erro
         "#,
     )
     .await?;
-    
+
     // Insert 10000 rows
     pool.execute(
         r#"
@@ -331,32 +335,34 @@ async fn test_large_table_export_import() -> Result<(), Box<dyn std::error::Erro
         "#,
     )
     .await?;
-    
+
     // Export
-    let export_metadata = loom.export_table("postgres", Some("public"), "test_large").await?;
+    let export_metadata = loom
+        .export_table("postgres", Some("public"), "test_large")
+        .await?;
     assert_eq!(export_metadata.table_info.row_count, 10000);
-    
+
     // Drop and reimport
     pool.execute("DROP TABLE test_large").await?;
-    
+
     let import_options = ImportOptions {
         create_table_if_not_exists: true,
         ..Default::default()
     };
-    
+
     let snapshot_path = export_metadata.get_snapshot_path("");
     let imported_rows = loom.import_snapshot(&snapshot_path, import_options).await?;
     assert_eq!(imported_rows, 10000);
-    
+
     // Verify
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM test_large")
         .fetch_one(&pool)
         .await?;
     assert_eq!(count, 10000);
-    
+
     // Cleanup
     pool.execute("DROP TABLE test_large").await?;
-    
+
     Ok(())
 }
 
@@ -367,11 +373,11 @@ async fn test_empty_table() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("Skipping empty table test - no database URL set");
         return Ok(());
     }
-    
+
     let database_url = database_url.unwrap();
     let loom = Loom::new_from_url(&database_url, "postgres").await?;
     let pool = sqlx::postgres::PgPool::connect(&database_url).await?;
-    
+
     // Create empty table
     pool.execute(
         r#"
@@ -383,32 +389,34 @@ async fn test_empty_table() -> Result<(), Box<dyn std::error::Error>> {
         "#,
     )
     .await?;
-    
+
     // Export empty table
-    let export_metadata = loom.export_table("postgres", Some("public"), "test_empty").await?;
+    let export_metadata = loom
+        .export_table("postgres", Some("public"), "test_empty")
+        .await?;
     assert_eq!(export_metadata.table_info.row_count, 0);
     assert_eq!(export_metadata.table_info.columns.len(), 2);
-    
+
     // Drop and reimport
     pool.execute("DROP TABLE test_empty").await?;
-    
+
     let import_options = ImportOptions {
         create_table_if_not_exists: true,
         ..Default::default()
     };
-    
+
     let snapshot_path = export_metadata.get_snapshot_path("");
     let imported_rows = loom.import_snapshot(&snapshot_path, import_options).await?;
     assert_eq!(imported_rows, 0);
-    
+
     // Verify table exists but is empty
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM test_empty")
         .fetch_one(&pool)
         .await?;
     assert_eq!(count, 0);
-    
+
     // Cleanup
     pool.execute("DROP TABLE test_empty").await?;
-    
+
     Ok(())
 }
